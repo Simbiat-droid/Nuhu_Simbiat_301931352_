@@ -1,0 +1,154 @@
+
+== Loading schema ==
+CREATE EXTENSION
+CREATE EXTENSION
+psql:<stdin>:17: NOTICE:  table "fine" does not exist, skipping
+DROP TABLE
+psql:<stdin>:18: NOTICE:  table "reservation" does not exist, skipping
+DROP TABLE
+psql:<stdin>:19: NOTICE:  table "loan" does not exist, skipping
+DROP TABLE
+psql:<stdin>:20: NOTICE:  table "copy" does not exist, skipping
+DROP TABLE
+psql:<stdin>:21: NOTICE:  table "book_author" does not exist, skipping
+DROP TABLE
+psql:<stdin>:22: NOTICE:  table "book" does not exist, skipping
+DROP TABLE
+psql:<stdin>:23: NOTICE:  table "author" does not exist, skipping
+DROP TABLE
+psql:<stdin>:24: NOTICE:  table "member" does not exist, skipping
+DROP TABLE
+psql:<stdin>:25: NOTICE:  table "branch" does not exist, skipping
+DROP TABLE
+psql:<stdin>:27: NOTICE:  function trg_set_loan_dates() does not exist, skipping
+DROP FUNCTION
+psql:<stdin>:28: NOTICE:  function trg_check_max_active_loans() does not exist, skipping
+DROP FUNCTION
+psql:<stdin>:29: NOTICE:  function trg_check_unpaid_fines() does not exist, skipping
+DROP FUNCTION
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+
+== Seed data ==
+TRUNCATE TABLE
+INSERT 0 4
+INSERT 0 25
+INSERT 0 42
+INSERT 0 44
+INSERT 0 60
+INSERT 0 15
+
+== Bulk data (50k+ loans) - takes 1-3 minutes ==
+psql:<stdin>:25: NOTICE:  truncate cascades to table "reservation"
+TRUNCATE TABLE
+INSERT 0 3000
+INSERT 0 5000
+DO
+DO
+UPDATE 1083
+UPDATE 45
+UPDATE 2903
+INSERT 0 2500
+INSERT 0 0
+INSERT 0 180
+ total_loans | active_loans 
+-------------+--------------
+       64602 |         1083
+(1 row)
+
+   table_name   | count 
+----------------+-------
+ reservations   |  2680
+ members        |  3000
+ copies         |  5000
+ copies_on_loan |  1083
+ unpaid_fines   |  1188
+ fines          | 25282
+ loans          | 64602
+(7 rows)
+
+
+== Constraint tests (every test must print PASS) ==
+DELETE 0
+DELETE 0
+DELETE 0
+DELETE 0
+DELETE 0
+DELETE 0
+INSERT 0 15
+DELETE 0
+DELETE 0
+==============================================================
+ ReadWell Libraries - Portfolio 1 Constraint Tests
+==============================================================
+psql:<stdin>:92: NOTICE:  TEST A PASS: exclusion constraint rejected overlapping loan (conflicting key value violates exclusion constraint "loan_copy_id_loan_range_excl")
+DO
+psql:<stdin>:155: NOTICE:  TEST B PASS: max-5-active-loans trigger fired (Member 3001 already has 5 active loans; cannot borrow again until one is returned.)
+DO
+psql:<stdin>:205: NOTICE:  TEST C PASS: unpaid-fines trigger fired (Member 3002 has unpaid fines of NGN 3000.00; borrowing blocked until fines are settled.)
+DO
+psql:<stdin>:248: NOTICE:  TEST D PASS: return_date-before-loan_date trigger fired (return_date 2026-10-22 18:28:05.037426+00 cannot be before loan_date 2026-11-01 18:28:05.037426+00)
+DO
+psql:<stdin>:271: NOTICE:  TEST E PASS: UNIQUE constraint rejected duplicate ISBN (duplicate key value violates unique constraint "book_isbn_key")
+DO
+psql:<stdin>:305: NOTICE:  TEST F1 PASS: CHECK constraint rejected fine amount=0 (new row for relation "fine" violates check constraint "fine_amount_check")
+psql:<stdin>:305: NOTICE:  TEST F2 PASS: CHECK constraint rejected negative fine (new row for relation "fine" violates check constraint "fine_amount_check")
+DO
+psql:<stdin>:352: NOTICE:  TEST G PASS: due_date auto-set to loan_date + 14 days (due_date=2026-11-20 18:28:05.041793+00)
+DO
+==============================================================
+ End of constraint tests. Every test above should show PASS.
+ A FAIL message means a constraint did NOT fire (a bug).
+==============================================================
+
+== Row counts ==
+      t      | count 
+-------------+-------
+ branch      |     4
+ author      |    25
+ book        |    42
+ book_author |    44
+ copy        |  5015
+ member      |  3002
+ loan        | 64610
+ fine        | 25283
+ reservation |  2680
+(9 rows)
+
+== Data sanity checks (all should look realistic) ==
+ branch | copies | on_loan_today 
+--------+--------+---------------
+ Yaba   |   1559 |           328
+ Ikeja  |   1568 |           335
+ Garki  |   1137 |           261
+ Kaduna |    751 |           159
+(4 rows)
+
+ active_loans | overdue_now | first_loan | latest_loan 
+--------------+-------------+------------+-------------
+         1090 |         215 | 2024-11-11 | 2026-11-11
+(1 row)
+
+== Portfolio 1 complete: 64610 loans ==
