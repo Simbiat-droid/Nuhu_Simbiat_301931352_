@@ -1,0 +1,430 @@
+
+== Create collection + schema validation (2 negative tests) ==
+Created collection `catalogue` with JSON schema validation.
+Validation level: strict | Validation action: error
+Smoke test inserted 5 valid documents (one per item type).
+Inserted _ids: {
+  "0": "6af4b3c5a0bcd2a1c51a9509",
+  "1": "6af4b3c5a0bcd2a1c51a950a",
+  "2": "6af4b3c5a0bcd2a1c51a950b",
+  "3": "6af4b3c5a0bcd2a1c51a950c",
+  "4": "6af4b3c5a0bcd2a1c51a950d"
+}
+
+=== Negative test: inserting a document that violates the schema ===
+Document being inserted: {
+  "itemType": "printed_book",
+  "title": "Missing Subject On Purpose",
+  "authors": [
+    "Anonymous"
+  ],
+  "createdAt": "2026-11-11T18:28:21.655Z",
+  "tags": [],
+  "isbn": "000-0000000000",
+  "rogueField": "this key is not in the schema"
+}
+REJECTED as expected.
+Error name : MongoServerError
+Error code : 121
+Error msg  : Document failed validation
+errInfo    : {
+  "failingDocumentId": "6af4b3c5a0bcd2a1c51a950e",
+  "details": {
+    "operatorName": "$jsonSchema",
+    "title": "ReadWell catalogue record",
+    "description": "Polymorphic catalogue record. itemType discriminates the shape; common fields are required for every record, type-specific fields are declared in properties and type-checked when present.",
+    "schemaRulesNotSatisfied": [
+      {
+        "operatorName": "additionalProperties",
+        "specifiedAs": {
+          "additionalProperties": false
+        },
+        "additionalProperties": [
+          "rogueField"
+        ]
+      },
+      {
+        "operatorName": "required",
+        "specifiedAs": {
+          "required": [
+            "itemType",
+            "title",
+            "subject",
+            "authors",
+            "createdAt",
+            "tags"
+          ]
+        },
+        "missingProperties": [
+          "subject"
+        ]
+      },
+      {
+        "operatorName": "oneOf",
+        "schemasNotSatisfied": [
+          {
+            "index": 0,
+            "details": [
+              {
+                "operatorName": "required",
+                "specifiedAs": {
+                  "required": [
+                    "isbn",
+                    "pages",
+                    "shelfCode",
+                    "branch"
+                  ]
+                },
+                "missingProperties": [
+                  "branch",
+                  "pages",
+                  "shelfCode"
+                ]
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "details": [
+              {
+                "operatorName": "properties",
+                "propertiesNotSatisfied": [
+                  {
+                    "propertyName": "itemType",
+                    "details": [
+                      {
+                        "operatorName": "enum",
+                        "specifiedAs": {
+                          "enum": [
+                            "ebook"
+                          ]
+                        },
+                        "reason": "value was not found in enum",
+                        "consideredValue": "printed_book"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "operatorName": "required",
+                "specifiedAs": {
+                  "required": [
+                    "fileFormat",
+                    "fileSizeMB",
+                    "licenceCount",
+                    "downloadCount"
+                  ]
+                },
+                "missingProperties": [
+                  "downloadCount",
+                  "fileFormat",
+                  "fileSizeMB",
+                  "licenceCount"
+                ]
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "details": [
+              {
+                "operatorName": "properties",
+                "propertiesNotSatisfied": [
+                  {
+                    "propertyName": "itemType",
+                    "details": [
+                      {
+                        "operatorName": "enum",
+                        "specifiedAs": {
+                          "enum": [
+                            "journal"
+                          ]
+                        },
+                        "reason": "value was not found in enum",
+                        "consideredValue": "printed_book"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "operatorName": "required",
+                "specifiedAs": {
+                  "required": [
+                    "journalName",
+                    "volume",
+                    "issue",
+                    "issn",
+                    "publishedDate"
+                  ]
+                },
+                "missingProperties": [
+                  "issn",
+                  "issue",
+                  "journalName",
+                  "publishedDate",
+                  "volume"
+                ]
+              }
+            ]
+          },
+          {
+            "index": 3,
+            "details": [
+              {
+                "operatorName": "properties",
+                "propertiesNotSatisfied": [
+                  {
+                    "propertyName": "itemType",
+                    "details": [
+                      {
+                        "operatorName": "enum",
+                        "specifiedAs": {
+                          "enum": [
+                            "thesis"
+                          ]
+                        },
+                        "reason": "value was not found in enum",
+                        "consideredValue": "printed_book"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "operatorName": "required",
+                "specifiedAs": {
+                  "required": [
+                    "awardingInstitution",
+                    "department",
+                    "supervisor",
+                    "degreeLevel",
+                    "defenseDate"
+                  ]
+                },
+                "missingProperties": [
+                  "awardingInstitution",
+                  "defenseDate",
+                  "degreeLevel",
+                  "department",
+                  "supervisor"
+                ]
+              }
+            ]
+          },
+          {
+            "index": 4,
+            "details": [
+              {
+                "operatorName": "properties",
+                "propertiesNotSatisfied": [
+                  {
+                    "propertyName": "itemType",
+                    "details": [
+                      {
+                        "operatorName": "enum",
+                        "specifiedAs": {
+                          "enum": [
+                            "magazine"
+                          ]
+                        },
+                        "reason": "value was not found in enum",
+                        "consideredValue": "printed_book"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "operatorName": "required",
+                "specifiedAs": {
+                  "required": [
+                    "issueName",
+                    "issueNumber",
+                    "publishedDate",
+                    "frequency"
+                  ]
+                },
+                "missingProperties": [
+                  "frequency",
+                  "issueName",
+                  "issueNumber",
+                  "publishedDate"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+=== Negative test 2: printed_book missing its per-type fields ===
+REJECTED as expected (oneOf per-type rule). Error code : 121
+
+Schema validation step complete. Collection ready for seeding.
+
+== Bulk generate 42,000 documents (clears the collection first) ==
+Clearing catalogue (deleteMany) so the run is reproducible...
+Cleared. Documents remaining: 0
+Generating 42000 documents in batches of 1000...
+  inserted ~5000 / 42000  (elapsed 424 ms)
+  inserted ~10000 / 42000  (elapsed 877 ms)
+  inserted ~15000 / 42000  (elapsed 1234 ms)
+  inserted ~20000 / 42000  (elapsed 1505 ms)
+  inserted ~25000 / 42000  (elapsed 1764 ms)
+  inserted ~30000 / 42000  (elapsed 2017 ms)
+  inserted ~35000 / 42000  (elapsed 2281 ms)
+  inserted ~40000 / 42000  (elapsed 2525 ms)
+
+================ BULK GENERATION SUMMARY ================
+Target total : 42000
+Inserted     : 42000
+In DB now    : 42000
+Elapsed (ms) : 2662
+Per-type counts:
+  printed_book   : 20947
+  ebook          : 8431
+  journal        : 6427
+  magazine       : 4140
+  thesis         : 2055
+Inserted total: 42000
+========================================================
+
+== Seed data (named records, inserted AFTER the bulk load so they are kept) ==
+Inserting 10 seed catalogue records...
+Inserted 10 seed records.
+Inserted _ids:
+  [0] => 6af4b3c9cfc205cc4df59368
+  [1] => 6af4b3c9cfc205cc4df59369
+  [2] => 6af4b3c9cfc205cc4df5936a
+  [3] => 6af4b3c9cfc205cc4df5936b
+  [4] => 6af4b3c9cfc205cc4df5936c
+  [5] => 6af4b3c9cfc205cc4df5936d
+  [6] => 6af4b3c9cfc205cc4df5936e
+  [7] => 6af4b3c9cfc205cc4df5936f
+  [8] => 6af4b3c9cfc205cc4df59370
+  [9] => 6af4b3c9cfc205cc4df59371
+
+Total documents in catalogue after seed: 42010
+
+== Aggregations ==
+Documents in catalogue: 42010
+
+================ A. ITEMS PER SUBJECT ================
+Pipeline: $group by $subject, count, $sort count desc.
+Purpose : which subjects dominate the ReadWell catalogue.
+Result (10 subjects):
+  Literature           11704
+  History              5419
+  Religion             4318
+  Medicine             3851
+  Engineering          3369
+  Economics            2887
+  Law                  2886
+  Computer Science     2730
+  Mathematics          2537
+  Biology              2309
+
+================ B. TOP 10 AUTHORS ================
+Pipeline: $unwind authors, $group by author, count, $sort desc, $limit 10.
+Purpose : which authors contribute the most catalogue records.
+Result (top 10):
+   1. Chinua Achebe                11368
+   2. Chimamanda Ngozi Adichie     5740
+   3. Wole Soyinka                 4621
+   4. Ngozi Okonjo-Iweala          3897
+   5. Toyin Falola                 3501
+   6. Adeyemi Adisa                3202
+   7. Ngozi Okoro                  3054
+   8. Sani Abdullahi               2851
+   9. Bisi Olawuyi                 2671
+  10. Yetunde Akinleye             2604
+
+================ C. E-BOOK DOWNLOADS ================
+Pipeline: $match itemType=ebook, $group by subject summing downloadCount, $sort desc.
+Purpose : which subjects drive the most e-book demand at ReadWell.
+Result (e-book downloads per subject):
+  Literature           5836125 downloads
+  History              2828219 downloads
+  Religion             2127683 downloads
+  Medicine             1892391 downloads
+  Engineering          1693281 downloads
+  Computer Science     1426291 downloads
+  Law                  1355761 downloads
+  Economics            1343391 downloads
+  Mathematics          1298561 downloads
+  Biology              1168432 downloads
+TOTAL e-books            : 8433
+TOTAL e-book downloads   : 20970135
+
+Aggregations complete.
+
+== Index demo (COLLSCAN -> IXSCAN) ==
+Documents in catalogue: 42010
+
+================ STEP 0: drop idx_subject if it exists ================
+No idx_subject to drop (IndexNotFound). OK, continuing.
+No idx_itemType_subject to drop (IndexNotFound). OK, continuing.
+
+================ STEP 1: find({subject:"Computer Science"}) WITHOUT index ================
+Expected winning plan: COLLSCAN (the whole collection is scanned).
+
+----- BEFORE index (expect COLLSCAN) -----
+winningPlan.stage          : COLLSCAN
+input stage                : COLLSCAN
+direction                  : forward
+nReturned                  : 2730
+totalDocsExamined          : 42010
+totalKeysExamined          : 0
+executionTimeMillis        : 17
+
+================ STEP 2: createIndex({subject:1}) ================
+createIndex result: "idx_subject"
+Indexes now: ["_id_","idx_subject"]
+
+================ STEP 3: find({subject:"Computer Science"}) WITH idx_subject ================
+Expected winning plan: IXSCAN on idx_subject, then FETCH.
+
+----- AFTER index (expect IXSCAN) -----
+winningPlan.stage          : FETCH
+input stage                : FETCH
+nReturned                  : 2730
+totalDocsExamined          : 2730
+totalKeysExamined          : 2730
+executionTimeMillis        : 5
+
+================ STEP 4: COLLSCAN vs IXSCAN comparison ================
+Metric                       | BEFORE (no idx)      | AFTER (idx_subject)
+-----------------------------|----------------------|----------------------
+Input stage                  | COLLSCAN             | IXSCAN              
+nReturned                    | 2730                 | 2730                
+totalDocsExamined            | 42010                | 2730                
+totalKeysExamined            | 0                    | 2730                
+executionTimeMillis          | 17                   | 5                   
+
+Observation: the COLLSCAN run examined every document in the collection
+(totalDocsExamined ≈ collection size); the IXSCAN run examined only the
+matching documents (plus the index keys), which is why indexed reads are
+dramatically faster as the catalogue grows past ~40,000 documents.
+
+================ STEP 5: compound index {itemType:1, subject:1} ================
+createIndex result: "idx_itemType_subject"
+
+----- Compound-index query (expect IXSCAN on idx_itemType_subject) -----
+winningPlan.stage          : FETCH
+input stage                : FETCH
+nReturned                  : 559
+totalDocsExamined          : 559
+totalKeysExamined          : 559
+executionTimeMillis        : 2
+
+This query has an equality on itemType and an equality on subject,
+both of which are leading keys of idx_itemType_subject, so the planner
+should use the compound index instead of falling back to idx_subject or
+a COLLSCAN. This is the leftmost-prefix rule in action.
+
+Index demo complete.
+== Portfolio 4 complete ==
