@@ -1,0 +1,11 @@
+# local scratch / editor files
+*.swp
+*~
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+# the zip you dragged in (code is committed as files instead)
+*.zip
+*FIXED*
+start.sh
