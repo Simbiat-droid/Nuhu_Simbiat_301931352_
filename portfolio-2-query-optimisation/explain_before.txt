@@ -1,0 +1,311 @@
+
+== EXPLAIN ANALYZE BEFORE indexes ==
+DROP INDEX
+ANALYZE
+--- Q1 EXPLAIN ANALYZE BEFORE ---
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=61.53..61.59 rows=23 width=73) (actual time=0.075..0.077 rows=16 loops=1)
+   Sort Key: c.copy_id
+   Sort Method: quicksort  Memory: 26kB
+   Buffers: shared hit=28
+   ->  Nested Loop  (cost=4.59..61.01 rows=23 width=73) (actual time=0.029..0.068 rows=16 loops=1)
+         Buffers: shared hit=28
+         ->  Seq Scan on branch br  (cost=0.00..1.05 rows=1 width=20) (actual time=0.004..0.004 rows=1 loops=1)
+               Filter: (name = 'Yaba'::text)
+               Rows Removed by Filter: 3
+               Buffers: shared hit=1
+         ->  Nested Loop  (cost=4.59..59.73 rows=23 width=69) (actual time=0.024..0.061 rows=16 loops=1)
+               Buffers: shared hit=27
+               ->  Seq Scan on book b  (cost=0.00..1.63 rows=1 width=51) (actual time=0.009..0.023 rows=1 loops=1)
+                     Filter: (lower(title) = 'things fall apart'::text)
+                     Rows Removed by Filter: 41
+                     Buffers: shared hit=1
+               ->  Bitmap Heap Scan on copy c  (cost=4.59..57.87 rows=23 width=34) (actual time=0.013..0.034 rows=16 loops=1)
+                     Recheck Cond: ((b.book_id = book_id) AND (br.branch_id = branch_id))
+                     Filter: (status = 'available'::text)
+                     Rows Removed by Filter: 6
+                     Heap Blocks: exact=24
+                     Buffers: shared hit=26
+                     ->  Bitmap Index Scan on idx_copy_book_branch  (cost=0.00..4.58 rows=30 width=0) (actual time=0.007..0.007 rows=28 loops=1)
+                           Index Cond: ((book_id = b.book_id) AND (branch_id = br.branch_id))
+                           Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=141
+ Planning Time: 0.466 ms
+ Execution Time: 0.105 ms
+(29 rows)
+
+--- Q2 EXPLAIN ANALYZE BEFORE ---
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=19134.96..19296.47 rows=64604 width=44) (actual time=63.631..63.642 rows=250 loops=1)
+   Sort Key: ranked.month DESC, ranked.rnk
+   Sort Method: quicksort  Memory: 42kB
+   Buffers: shared hit=862
+   ->  Subquery Scan on ranked  (cost=9885.68..11985.31 rows=64604 width=44) (actual time=63.381..63.576 rows=250 loops=1)
+         Buffers: shared hit=862
+         ->  WindowAgg  (cost=9885.68..11339.27 rows=64604 width=44) (actual time=63.381..63.557 rows=250 loops=1)
+               Run Condition: (rank() OVER (?) <= 10)
+               Buffers: shared hit=862
+               ->  Sort  (cost=9885.68..10047.19 rows=64604 width=36) (actual time=63.375..63.414 rows=1050 loops=1)
+                     Sort Key: monthly.month, monthly.borrows DESC, monthly.title
+                     Sort Method: quicksort  Memory: 114kB
+                     Buffers: shared hit=862
+                     ->  Subquery Scan on monthly  (cost=3270.45..4724.04 rows=64604 width=36) (actual time=62.552..62.912 rows=1050 loops=1)
+                           Buffers: shared hit=862
+                           ->  HashAggregate  (cost=3270.45..4078.00 rows=64604 width=44) (actual time=62.552..62.842 rows=1050 loops=1)
+                                 Group Key: date_trunc('month'::text, l.loan_date), b.book_id
+                                 Batches: 1  Memory Usage: 1681kB
+                                 Buffers: shared hit=862
+                                 ->  Hash Join  (cost=177.78..2785.92 rows=64604 width=36) (actual time=1.035..52.603 rows=64610 loops=1)
+                                       Hash Cond: (c.book_id = b.book_id)
+                                       Buffers: shared hit=862
+                                       ->  Hash Join  (cost=175.84..2435.77 rows=64604 width=16) (actual time=0.972..33.584 rows=64610 loops=1)
+                                             Hash Cond: (l.copy_id = c.copy_id)
+                                             Buffers: shared hit=861
+                                             ->  Seq Scan on loan l  (cost=0.00..2090.20 rows=64604 width=16) (actual time=0.007..21.968 rows=64610 loops=1)
+                                                   Filter: (loan_date >= (date_trunc('month'::text, now()) - '2 years'::interval))
+                                                   Buffers: shared hit=798
+                                             ->  Hash  (cost=113.15..113.15 rows=5015 width=16) (actual time=0.956..0.956 rows=5015 loops=1)
+                                                   Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                                   Buffers: shared hit=63
+                                                   ->  Seq Scan on copy c  (cost=0.00..113.15 rows=5015 width=16) (actual time=0.003..0.419 rows=5015 loops=1)
+                                                         Buffers: shared hit=63
+                                       ->  Hash  (cost=1.42..1.42 rows=42 width=28) (actual time=0.039..0.040 rows=42 loops=1)
+                                             Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                             Buffers: shared hit=1
+                                             ->  Seq Scan on book b  (cost=0.00..1.42 rows=42 width=28) (actual time=0.006..0.011 rows=42 loops=1)
+                                                   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=70
+ Planning Time: 0.345 ms
+ Execution Time: 63.778 ms
+(42 rows)
+
+--- Q3 EXPLAIN ANALYZE BEFORE ---
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2185.69..2188.51 rows=1125 width=115) (actual time=8.465..8.483 rows=215 loops=1)
+   Sort Key: (((now())::date - (l.due_date)::date)) DESC, l.loan_id
+   Sort Method: quicksort  Memory: 51kB
+   Buffers: shared hit=946
+   ->  Hash Join  (cost=329.42..2128.68 rows=1125 width=115) (actual time=1.824..8.314 rows=215 loops=1)
+         Hash Cond: (c.branch_id = br.branch_id)
+         Buffers: shared hit=946
+         ->  Hash Join  (cost=328.33..2104.64 rows=1125 width=94) (actual time=1.809..8.175 rows=215 loops=1)
+               Hash Cond: (l.member_id = m.member_id)
+               Buffers: shared hit=945
+               ->  Hash Join  (cost=177.78..1951.14 rows=1125 width=60) (actual time=1.054..7.350 rows=215 loops=1)
+                     Hash Cond: (c.book_id = b.book_id)
+                     Buffers: shared hit=862
+                     ->  Hash Join  (cost=175.84..1945.94 rows=1125 width=48) (actual time=1.040..7.283 rows=215 loops=1)
+                           Hash Cond: (l.copy_id = c.copy_id)
+                           Buffers: shared hit=861
+                           ->  Seq Scan on loan l  (cost=0.00..1767.15 rows=1125 width=40) (actual time=0.062..6.234 rows=215 loops=1)
+                                 Filter: ((return_date IS NULL) AND (due_date < now()))
+                                 Rows Removed by Filter: 64395
+                                 Buffers: shared hit=798
+                           ->  Hash  (cost=113.15..113.15 rows=5015 width=24) (actual time=0.971..0.972 rows=5015 loops=1)
+                                 Buckets: 8192  Batches: 1  Memory Usage: 339kB
+                                 Buffers: shared hit=63
+                                 ->  Seq Scan on copy c  (cost=0.00..113.15 rows=5015 width=24) (actual time=0.003..0.441 rows=5015 loops=1)
+                                       Buffers: shared hit=63
+                     ->  Hash  (cost=1.42..1.42 rows=42 width=28) (actual time=0.010..0.011 rows=42 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                           Buffers: shared hit=1
+                           ->  Seq Scan on book b  (cost=0.00..1.42 rows=42 width=28) (actual time=0.002..0.005 rows=42 loops=1)
+                                 Buffers: shared hit=1
+               ->  Hash  (cost=113.02..113.02 rows=3002 width=50) (actual time=0.751..0.751 rows=3002 loops=1)
+                     Buckets: 4096  Batches: 1  Memory Usage: 286kB
+                     Buffers: shared hit=83
+                     ->  Seq Scan on member m  (cost=0.00..113.02 rows=3002 width=50) (actual time=0.003..0.320 rows=3002 loops=1)
+                           Buffers: shared hit=83
+         ->  Hash  (cost=1.04..1.04 rows=4 width=14) (actual time=0.009..0.009 rows=4 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=1
+               ->  Seq Scan on branch br  (cost=0.00..1.04 rows=4 width=14) (actual time=0.005..0.006 rows=4 loops=1)
+                     Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=76
+ Planning Time: 0.594 ms
+ Execution Time: 8.560 ms
+(44 rows)
+
+--- Q4 EXPLAIN ANALYZE BEFORE ---
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2095.31..2096.30 rows=396 width=122) (actual time=13.376..13.410 rows=962 loops=1)
+   Sort Key: (sum(f.amount)) DESC, (((m.first_name || ' '::text) || m.last_name))
+   Sort Method: quicksort  Memory: 127kB
+   Buffers: shared hit=1093
+   ->  HashAggregate  (cost=2058.41..2078.22 rows=396 width=122) (actual time=12.227..12.531 rows=962 loops=1)
+         Group Key: m.member_id
+         Filter: (sum(f.amount) > '0'::numeric)
+         Batches: 1  Memory Usage: 577kB
+         Buffers: shared hit=1093
+         ->  Hash Join  (cost=348.09..2049.49 rows=1189 width=63) (actual time=1.772..11.705 rows=1189 loops=1)
+               Hash Cond: (l.member_id = m.member_id)
+               Buffers: shared hit=1093
+               ->  Hash Join  (cost=197.55..1895.83 rows=1189 width=21) (actual time=0.869..10.527 rows=1189 loops=1)
+                     Hash Cond: (l.loan_id = f.loan_id)
+                     Buffers: shared hit=1010
+                     ->  Seq Scan on loan l  (cost=0.00..1444.10 rows=64610 width=16) (actual time=0.006..4.450 rows=64610 loops=1)
+                           Buffers: shared hit=798
+                     ->  Hash  (cost=182.69..182.69 rows=1189 width=21) (actual time=0.846..0.846 rows=1189 loops=1)
+                           Buckets: 2048  Batches: 1  Memory Usage: 82kB
+                           Buffers: shared hit=212
+                           ->  Index Scan using idx_fine_paid on fine f  (cost=0.15..182.69 rows=1189 width=21) (actual time=0.010..0.559 rows=1189 loops=1)
+                                 Buffers: shared hit=212
+               ->  Hash  (cost=113.02..113.02 rows=3002 width=50) (actual time=0.899..0.899 rows=3002 loops=1)
+                     Buckets: 4096  Batches: 1  Memory Usage: 276kB
+                     Buffers: shared hit=83
+                     ->  Seq Scan on member m  (cost=0.00..113.02 rows=3002 width=50) (actual time=0.003..0.345 rows=3002 loops=1)
+                           Buffers: shared hit=83
+ Planning:
+   Buffers: shared hit=89
+ Planning Time: 0.436 ms
+ Execution Time: 13.500 ms
+(31 rows)
+
+--- Q5 EXPLAIN ANALYZE BEFORE ---
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2924.18..2924.20 rows=8 width=49) (actual time=58.890..58.893 rows=8 loops=1)
+   Sort Key: (round(avg((EXTRACT(epoch FROM (l.return_date - l.loan_date)) / '86400'::numeric)), 2)) DESC NULLS LAST, b.category
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=862
+   ->  HashAggregate  (cost=2923.94..2924.06 rows=8 width=49) (actual time=58.876..58.883 rows=8 loops=1)
+         Group Key: b.category
+         Batches: 1  Memory Usage: 24kB
+         Buffers: shared hit=862
+         ->  Hash Join  (cost=177.78..1972.01 rows=63462 width=33) (actual time=0.981..29.159 rows=63520 loops=1)
+               Hash Cond: (c.book_id = b.book_id)
+               Buffers: shared hit=862
+               ->  Hash Join  (cost=175.84..1786.67 rows=63462 width=32) (actual time=0.965..19.513 rows=63520 loops=1)
+                     Hash Cond: (l.copy_id = c.copy_id)
+                     Buffers: shared hit=861
+                     ->  Seq Scan on loan l  (cost=0.00..1444.10 rows=63462 width=32) (actual time=0.002..7.596 rows=63520 loops=1)
+                           Filter: (return_date IS NOT NULL)
+                           Rows Removed by Filter: 1090
+                           Buffers: shared hit=798
+                     ->  Hash  (cost=113.15..113.15 rows=5015 width=16) (actual time=0.958..0.959 rows=5015 loops=1)
+                           Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                           Buffers: shared hit=63
+                           ->  Seq Scan on copy c  (cost=0.00..113.15 rows=5015 width=16) (actual time=0.002..0.436 rows=5015 loops=1)
+                                 Buffers: shared hit=63
+               ->  Hash  (cost=1.42..1.42 rows=42 width=17) (actual time=0.014..0.014 rows=42 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                     Buffers: shared hit=1
+                     ->  Seq Scan on book b  (cost=0.00..1.42 rows=42 width=17) (actual time=0.004..0.007 rows=42 loops=1)
+                           Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=13
+ Planning Time: 0.179 ms
+ Execution Time: 58.920 ms
+(32 rows)
+
+--- Q6 EXPLAIN ANALYZE BEFORE ---
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2208.95..2208.96 rows=4 width=44) (actual time=12.418..12.421 rows=4 loops=1)
+   Sort Key: (COALESCE(l.total_loans, '0'::bigint)) DESC NULLS LAST, br.name
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=890
+   ->  Hash Left Join  (cost=2207.82..2208.91 rows=4 width=44) (actual time=12.409..12.415 rows=4 loops=1)
+         Hash Cond: (br.branch_id = l.branch_id)
+         Buffers: shared hit=890
+         ->  Hash Left Join  (cost=76.43..77.49 rows=4 width=28) (actual time=0.506..0.509 rows=4 loops=1)
+               Hash Cond: (br.branch_id = r.branch_id)
+               Buffers: shared hit=29
+               ->  Seq Scan on branch br  (cost=0.00..1.04 rows=4 width=20) (actual time=0.003..0.004 rows=4 loops=1)
+                     Buffers: shared hit=1
+               ->  Hash  (cost=76.38..76.38 rows=4 width=16) (actual time=0.500..0.501 rows=4 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                     Buffers: shared hit=28
+                     ->  Subquery Scan on r  (cost=76.30..76.38 rows=4 width=16) (actual time=0.496..0.498 rows=4 loops=1)
+                           Buffers: shared hit=28
+                           ->  HashAggregate  (cost=76.30..76.34 rows=4 width=16) (actual time=0.495..0.496 rows=4 loops=1)
+                                 Group Key: reservation.branch_id
+                                 Batches: 1  Memory Usage: 24kB
+                                 Buffers: shared hit=28
+                                 ->  Seq Scan on reservation  (cost=0.00..74.90 rows=280 width=8) (actual time=0.008..0.459 rows=280 loops=1)
+                                       Filter: (reserved_at >= (now() - '30 days'::interval))
+                                       Rows Removed by Filter: 2400
+                                       Buffers: shared hit=28
+         ->  Hash  (cost=2131.34..2131.34 rows=4 width=24) (actual time=11.899..11.900 rows=4 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=861
+               ->  Subquery Scan on l  (cost=2131.26..2131.34 rows=4 width=24) (actual time=11.895..11.897 rows=4 loops=1)
+                     Buffers: shared hit=861
+                     ->  HashAggregate  (cost=2131.26..2131.30 rows=4 width=24) (actual time=11.894..11.895 rows=4 loops=1)
+                           Group Key: c.branch_id
+                           Batches: 1  Memory Usage: 24kB
+                           Buffers: shared hit=861
+                           ->  Hash Join  (cost=175.84..2111.46 rows=2641 width=16) (actual time=0.927..11.552 rows=2613 loops=1)
+                                 Hash Cond: (l_1.copy_id = c.copy_id)
+                                 Buffers: shared hit=861
+                                 ->  Seq Scan on loan l_1  (cost=0.00..1928.68 rows=2641 width=16) (actual time=0.008..10.150 rows=2613 loops=1)
+                                       Filter: (loan_date >= (now() - '30 days'::interval))
+                                       Rows Removed by Filter: 61997
+                                       Buffers: shared hit=798
+                                 ->  Hash  (cost=113.15..113.15 rows=5015 width=16) (actual time=0.914..0.915 rows=5015 loops=1)
+                                       Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                       Buffers: shared hit=63
+                                       ->  Seq Scan on copy c  (cost=0.00..113.15 rows=5015 width=16) (actual time=0.003..0.441 rows=5015 loops=1)
+                                             Buffers: shared hit=63
+ Planning:
+   Buffers: shared hit=37
+ Planning Time: 0.347 ms
+ Execution Time: 12.459 ms
+(50 rows)
+
+--- Q9 EXPLAIN ANALYZE BEFORE ---
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1763.25..1763.30 rows=21 width=48) (actual time=3.537..3.538 rows=22 loops=1)
+   Sort Key: l.loan_date DESC
+   Sort Method: quicksort  Memory: 26kB
+   Buffers: shared hit=873
+   ->  Nested Loop  (cost=0.28..1762.79 rows=21 width=48) (actual time=0.671..3.529 rows=22 loops=1)
+         Join Filter: (b.book_id = c.book_id)
+         Rows Removed by Join Filter: 902
+         Buffers: shared hit=873
+         ->  Seq Scan on book b  (cost=0.00..1.42 rows=42 width=28) (actual time=0.005..0.007 rows=42 loops=1)
+               Buffers: shared hit=1
+         ->  Materialize  (cost=0.28..1748.03 rows=21 width=40) (actual time=0.002..0.082 rows=22 loops=42)
+               Buffers: shared hit=872
+               ->  Nested Loop  (cost=0.28..1747.93 rows=21 width=40) (actual time=0.096..3.420 rows=22 loops=1)
+                     Buffers: shared hit=872
+                     ->  Seq Scan on loan l  (cost=0.00..1605.62 rows=21 width=40) (actual time=0.092..3.367 rows=22 loops=1)
+                           Filter: (member_id = 1234)
+                           Rows Removed by Filter: 64588
+                           Buffers: shared hit=798
+                     ->  Index Scan using copy_pkey on copy c  (cost=0.28..6.78 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=22)
+                           Index Cond: (copy_id = l.copy_id)
+                           Buffers: shared hit=70
+ Planning:
+   Buffers: shared hit=15
+ Planning Time: 0.300 ms
+ Execution Time: 3.557 ms
+(25 rows)
+
+--- Q10 EXPLAIN ANALYZE BEFORE ---
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1931.88..1932.12 rows=97 width=32) (actual time=5.823..5.898 rows=88 loops=1)
+   Sort Key: loan_date DESC
+   Sort Method: quicksort  Memory: 29kB
+   Buffers: shared hit=798
+   ->  Seq Scan on loan l  (cost=0.00..1928.68 rows=97 width=32) (actual time=0.159..5.796 rows=88 loops=1)
+         Filter: (loan_date >= (now() - '24:00:00'::interval))
+         Rows Removed by Filter: 64522
+         Buffers: shared hit=798
+ Planning Time: 0.059 ms
+ Execution Time: 5.911 ms
+(10 rows)
+
+==============================================================
+End of 02_explain_before.sql - copy the Execution Time line and
+the top-level plan node into 05_results_table.md (BEFORE column).
+==============================================================
