@@ -1,0 +1,306 @@
+================================================================
+ Portfolio 5 - ReadWell Libraries (Distributed & Cloud)
+ Student: Nuhu Simbiat - 2026/A/MIT/0955
+================================================================
+
+== 1. Partitioning loan by month ==
+================================================================
+ STEP 1 - Rename the existing loan table to loan_old
+================================================================
+ALTER TABLE
+DROP TRIGGER
+DROP TRIGGER
+DROP TRIGGER
+ALTER TABLE
+ALTER SEQUENCE
+DO
+
+loan_old now holds the historical data; the old triggers are detached.
+The FK from `fine` still references loan_old.loan_id (FKs follow renames).
+================================================================
+ STEP 2 - Create the new partitioned parent table loan
+================================================================
+CREATE TABLE
+================================================================
+ STEP 3 - Create monthly partitions: last 24 months + next 2 months
+================================================================
+DO
+================================================================
+ STEP 4 - Indexes on the partitioned parent
+         (PostgreSQL 16 propagates them to every partition)
+================================================================
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+================================================================
+ STEP 5 - Re-create the loan triggers on the new partitioned parent
+         (functions already exist from Portfolio 1; rebind triggers)
+================================================================
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+================================================================
+ STEP 6 - Migrate rows from loan_old into the partitioned loan
+================================================================
+ALTER TABLE
+INSERT 0 64614
+ALTER TABLE
+rows in loan_old vs partitioned loan (must match):
+ loan_old_rows | loan_rows | rows_in_default_partition 
+---------------+-----------+---------------------------
+         64614 |     64614 |                         0
+(1 row)
+
+ALTER TABLE
+UPDATE 25285
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+================================================================
+ STEP 7 - Sync the BIGSERIAL sequence to MAX(loan_id)
+================================================================
+ new_seq_value 
+---------------
+         64624
+(1 row)
+
+================================================================
+ STEP 8 - Retain loan_old renamed as a backup (DO NOT DROP)
+================================================================
+================================================================
+ STEP 9 - List the loan partitions
+================================================================
+ schema_name | partition_name |                             partition_bound                              |  size   
+-------------+----------------+--------------------------------------------------------------------------+---------
+ public      | loan_202411    | FOR VALUES FROM ('2024-11-01 00:00:00+00') TO ('2024-12-01 00:00:00+00') | 320 kB
+ public      | loan_202412    | FOR VALUES FROM ('2024-12-01 00:00:00+00') TO ('2025-01-01 00:00:00+00') | 216 kB
+ public      | loan_202501    | FOR VALUES FROM ('2025-01-01 00:00:00+00') TO ('2025-02-01 00:00:00+00') | 328 kB
+ public      | loan_202502    | FOR VALUES FROM ('2025-02-01 00:00:00+00') TO ('2025-03-01 00:00:00+00') | 208 kB
+ public      | loan_202503    | FOR VALUES FROM ('2025-03-01 00:00:00+00') TO ('2025-04-01 00:00:00+00') | 288 kB
+ public      | loan_202504    | FOR VALUES FROM ('2025-04-01 00:00:00+00') TO ('2025-05-01 00:00:00+00') | 248 kB
+ public      | loan_202505    | FOR VALUES FROM ('2025-05-01 00:00:00+00') TO ('2025-06-01 00:00:00+00') | 280 kB
+ public      | loan_202506    | FOR VALUES FROM ('2025-06-01 00:00:00+00') TO ('2025-07-01 00:00:00+00') | 256 kB
+ public      | loan_202507    | FOR VALUES FROM ('2025-07-01 00:00:00+00') TO ('2025-08-01 00:00:00+00') | 280 kB
+ public      | loan_202508    | FOR VALUES FROM ('2025-08-01 00:00:00+00') TO ('2025-09-01 00:00:00+00') | 264 kB
+ public      | loan_202509    | FOR VALUES FROM ('2025-09-01 00:00:00+00') TO ('2025-10-01 00:00:00+00') | 256 kB
+ public      | loan_202510    | FOR VALUES FROM ('2025-10-01 00:00:00+00') TO ('2025-11-01 00:00:00+00') | 272 kB
+ public      | loan_202511    | FOR VALUES FROM ('2025-11-01 00:00:00+00') TO ('2025-12-01 00:00:00+00') | 256 kB
+ public      | loan_202512    | FOR VALUES FROM ('2025-12-01 00:00:00+00') TO ('2026-01-01 00:00:00+00') | 272 kB
+ public      | loan_202601    | FOR VALUES FROM ('2026-01-01 00:00:00+00') TO ('2026-02-01 00:00:00+00') | 272 kB
+ public      | loan_202602    | FOR VALUES FROM ('2026-02-01 00:00:00+00') TO ('2026-03-01 00:00:00+00') | 240 kB
+ public      | loan_202603    | FOR VALUES FROM ('2026-03-01 00:00:00+00') TO ('2026-04-01 00:00:00+00') | 272 kB
+ public      | loan_202604    | FOR VALUES FROM ('2026-04-01 00:00:00+00') TO ('2026-05-01 00:00:00+00') | 256 kB
+ public      | loan_202605    | FOR VALUES FROM ('2026-05-01 00:00:00+00') TO ('2026-06-01 00:00:00+00') | 272 kB
+ public      | loan_202606    | FOR VALUES FROM ('2026-06-01 00:00:00+00') TO ('2026-07-01 00:00:00+00') | 256 kB
+ public      | loan_202607    | FOR VALUES FROM ('2026-07-01 00:00:00+00') TO ('2026-08-01 00:00:00+00') | 272 kB
+ public      | loan_202608    | FOR VALUES FROM ('2026-08-01 00:00:00+00') TO ('2026-09-01 00:00:00+00') | 272 kB
+ public      | loan_202609    | FOR VALUES FROM ('2026-09-01 00:00:00+00') TO ('2026-10-01 00:00:00+00') | 264 kB
+ public      | loan_202610    | FOR VALUES FROM ('2026-10-01 00:00:00+00') TO ('2026-11-01 00:00:00+00') | 264 kB
+ public      | loan_202611    | FOR VALUES FROM ('2026-11-01 00:00:00+00') TO ('2026-12-01 00:00:00+00') | 96 kB
+ public      | loan_202612    | FOR VALUES FROM ('2026-12-01 00:00:00+00') TO ('2027-01-01 00:00:00+00') | 0 bytes
+ public      | loan_202701    | FOR VALUES FROM ('2027-01-01 00:00:00+00') TO ('2027-02-01 00:00:00+00') | 0 bytes
+ public      | loan_default   | DEFAULT                                                                  | 0 bytes
+(28 rows)
+
+rows per partition (newest 6 months):
+  partition  | loans 
+-------------+-------
+ loan_202611 |   954
+ loan_202610 |  2637
+ loan_202609 |  2619
+ loan_202608 |  2675
+ loan_202607 |  2730
+ loan_202606 |  2554
+(6 rows)
+
+overlap guard test: a second loan of a copy that is already on loan must be rejected
+psql:<stdin>:279: NOTICE:  OVERLAP TEST PASS: copy 23 is already on loan for an overlapping period
+DO
+================================================================
+ STEP 10 - EXPLAIN: partition pruning on a single-month filter
+================================================================
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=4.45..767.88 rows=316 width=48) (actual time=0.057..0.244 rows=954 loops=1)
+   Subplans Removed: 27
+   ->  Bitmap Heap Scan on loan_202611 loan_1  (cost=4.33..13.51 rows=4 width=48) (actual time=0.057..0.191 rows=954 loops=1)
+         Recheck Cond: ((loan_date >= date_trunc('month'::text, now())) AND (loan_date < (date_trunc('month'::text, now()) + '1 mon'::interval)))
+         Heap Blocks: exact=12
+         ->  Bitmap Index Scan on loan_202611_loan_date_idx  (cost=0.00..4.33 rows=4 width=0) (actual time=0.050..0.050 rows=954 loops=1)
+               Index Cond: ((loan_date >= date_trunc('month'::text, now())) AND (loan_date < (date_trunc('month'::text, now()) + '1 mon'::interval)))
+ Planning Time: 0.853 ms
+ Execution Time: 0.293 ms
+(9 rows)
+
+================================================================
+ Partitioning complete. Next: 02_replica_setup.sh and 03_replica_demo.sh (run_p5.sh runs both).
+================================================================
+
+== 2. Streaming replica setup ==
+================================================================
+ ReadWell Libraries - streaming replica setup (Portfolio 5)
+ Student: Nuhu Simbiat - 2026/A/MIT/0955
+ Primary data dir : /var/lib/postgresql/16/main
+ Replica data dir : /var/lib/postgresql/16/replica
+ Replica port     : 5433
+ Replication slot : replica_slot
+================================================================
+
+== STEP 1: Configure PRIMARY postgresql.conf for replication ==
+   wal_level=replica, max_wal_senders=10, max_replication_slots=10,
+   listen_addresses='localhost'
+   backed up original -> /etc/postgresql/16/main/postgresql.conf.orig
+   primary postgresql.conf updated.
+
+== STEP 2: PREPEND replication trust lines to TOP of pg_hba.conf ==
+   backed up original -> /etc/postgresql/16/main/pg_hba.conf.orig
+   pg_hba.conf trust block now at the TOP of the file.
+
+== STEP 3: Restart PostgreSQL primary ==
+   primary restarted.
+   live settings:
+listen_addresses = localhost
+max_replication_slots = 10
+max_wal_senders = 10
+wal_level = replica
+
+== STEP 4: Stop any existing replica cluster on port 5433 ==
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+   replica data dir is now empty: /var/lib/postgresql/16/replica
+
+== STEP 5: pg_basebackup (clone primary -> replica via Unix socket) ==
+   base backup complete.
+   standby.signal written by -R:
+-rw------- 1 postgres postgres 0 Nov 11 18:28 /var/lib/postgresql/16/replica/standby.signal
+   primary_conninfo recorded in postgresql.auto.conf:
+primary_conninfo = 'user=postgres passfile=''/var/lib/postgresql/.pgpass'' channel_binding=prefer host=''/var/run/postgresql'' port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable'
+primary_slot_name = 'replica_slot'
+
+== STEP 6: Write replica postgresql.conf at /var/lib/postgresql/16/replica/postgresql.conf ==
+   replica config written: /var/lib/postgresql/16/replica/postgresql.conf
+
+== STEP 7: Write replica pg_hba.conf (local trust on port 5433) ==
+   replica pg_hba.conf written: /var/lib/postgresql/16/replica/pg_hba.conf
+
+== STEP 8: Start replica with pg_ctl (config_file override) ==
+waiting for server to start.... done
+server started
+   replica started on port 5433.
+   replica log: /var/lib/postgresql/16/replica/replica.log
+
+== STEP 9a: On PRIMARY - pg_stat_replication (should list the replica) ==
+  pid  | usename  | application_name | client_addr |   state   | sync_state | sent_lsn  | write_lsn | flush_lsn | replay_lsn 
+-------+----------+------------------+-------------+-----------+------------+-----------+-----------+-----------+------------
+ 30012 | postgres | walreceiver      |             | streaming | async      | 0/A000000 | 0/A000000 | 0/A000000 | 0/A000000
+(1 row)
+
+
+== STEP 9b: On REPLICA - pg_is_in_recovery() (must be true) ==
+ in_recovery 
+-------------
+ t
+(1 row)
+
+
+== STEP 9c: On REPLICA - replication replay lag ==
+ replay_lag 
+------------
+ 
+(1 row)
+
+
+================================================================
+ Replica setup complete.
+ Primary  :  sudo runuser -u postgres -- psql -d readwell
+ Replica  :  sudo runuser -u postgres -- psql -p 5433 -d readwell
+
+ Next step: run 03_replica_demo.sql against BOTH targets and paste
+            the real outputs into that file.
+================================================================
+
+== 3. Replication demo (saved to replication_output.log) ==
+----------------------------------------------------------------
+1. WHO IS WHO
+----------------------------------------------------------------
+[PRIMARY]
+ port | is_replica |          checked_at           
+------+------------+-------------------------------
+ 5432 | f          | 2026-11-11 18:28:48.224396+00
+(1 row)
+
+[REPLICA]
+ port | is_replica |          checked_at           
+------+------------+-------------------------------
+ 5433 | t          | 2026-11-11 18:28:48.282463+00
+(1 row)
+
+----------------------------------------------------------------
+2. A WRITE ON THE REPLICA IS REJECTED
+----------------------------------------------------------------
+[REPLICA] INSERT INTO branch (name, city) VALUES ('Reject Test', 'Lagos');
+ERROR:  cannot execute INSERT in a read-only transaction
+=> rejected as expected: the standby is read-only
+----------------------------------------------------------------
+3. INSERT ON THE PRIMARY -> ROW ARRIVES ON THE REPLICA
+----------------------------------------------------------------
+[PRIMARY] INSERT branch 'Replica Test 182848'
+ branch_id |        name         |          created_at           
+-----------+---------------------+-------------------------------
+         5 | Replica Test 182848 | 2026-11-11 18:28:48.422088+00
+(1 row)
+
+INSERT 0 1
+[REPLICA] SELECT ... WHERE name = 'Replica Test 182848'
+ branch_id |        name         |  city  |          created_at           
+-----------+---------------------+--------+-------------------------------
+         5 | Replica Test 182848 | Kaduna | 2026-11-11 18:28:48.422088+00
+(1 row)
+
+=> row visible on the replica after about 0.05 s of polling
+----------------------------------------------------------------
+4. REPLICATION LAG
+----------------------------------------------------------------
+[PRIMARY] pg_stat_replication
+ application_name | client_addr |   state   | sync_state | sent_lsn  | replay_lsn | byte_lag |   replay_lag    
+------------------+-------------+-----------+------------+-----------+------------+----------+-----------------
+ walreceiver      |             | streaming | async      | 0/A005D38 | 0/A005D38  |        0 | 00:00:00.006252
+(1 row)
+
+[REPLICA] last replayed position and delay
+ received_lsn | replayed_lsn | time_since_last_replayed_txn 
+--------------+--------------+------------------------------
+ 0/A005D38    | 0/A005D38    | 00:00:00.243363
+(1 row)
+
+----------------------------------------------------------------
+5. PARTITION PRUNING (PRIMARY): loans of the current month only
+----------------------------------------------------------------
+                                                                                                            QUERY PLAN                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual time=0.324..0.324 rows=1 loops=1)
+   ->  Append (actual time=0.094..0.289 rows=954 loops=1)
+         Subplans Removed: 27
+         ->  Bitmap Heap Scan on loan_202611 loan_1 (actual time=0.094..0.245 rows=954 loops=1)
+               Recheck Cond: ((loan_date >= date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)) AND (loan_date < (date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone) + '1 mon'::interval)))
+               Heap Blocks: exact=12
+               ->  Bitmap Index Scan on loan_202611_loan_date_idx (actual time=0.079..0.080 rows=954 loops=1)
+                     Index Cond: ((loan_date >= date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)) AND (loan_date < (date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone) + '1 mon'::interval)))
+(8 rows)
+
+[REPLICA] the same partitioned table is readable on the replica:
+ loans_this_month 
+------------------
+              954
+(1 row)
+
+
+Replication demo finished.
+
+== Portfolio 5 complete. See 04_cloud_architecture.md for the design. ==

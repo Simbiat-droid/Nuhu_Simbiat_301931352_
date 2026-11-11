@@ -1,0 +1,20 @@
+-- =============================================================================
+-- 03_replica_demo.sql - Portfolio 5 (Nuhu Simbiat - 2026/A/MIT/0955)
+-- The replication demo is now ONE script that switches between the primary
+-- (port 5432) and the replica (port 5433) by itself:
+--
+--     bash 03_replica_demo.sh
+--
+-- run_p5.sh calls it and saves the output to replication_output.log.
+-- The individual statements, if you want to type them yourself:
+--   REPLICA: sudo runuser -u postgres -- psql -p 5433 -d readwell
+--            INSERT INTO branch (name, city) VALUES ('Reject Test','Lagos');
+--            -- ERROR: cannot execute INSERT in a read-only transaction
+--   PRIMARY: sudo runuser -u postgres -- psql -d readwell
+--            INSERT INTO branch (name, city) VALUES ('Replica Test','Kaduna');
+--   REPLICA: SELECT * FROM branch WHERE name = 'Replica Test';
+--   PRIMARY: SELECT application_name, state, sync_state,
+--                   pg_wal_lsn_diff(sent_lsn, replay_lsn) AS byte_lag
+--            FROM pg_stat_replication;
+-- =============================================================================
+SELECT current_setting('port') AS port, pg_is_in_recovery() AS is_replica;

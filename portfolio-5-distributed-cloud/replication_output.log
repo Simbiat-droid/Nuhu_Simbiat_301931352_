@@ -1,0 +1,76 @@
+----------------------------------------------------------------
+1. WHO IS WHO
+----------------------------------------------------------------
+[PRIMARY]
+ port | is_replica |          checked_at           
+------+------------+-------------------------------
+ 5432 | f          | 2026-11-11 18:28:48.224396+00
+(1 row)
+
+[REPLICA]
+ port | is_replica |          checked_at           
+------+------------+-------------------------------
+ 5433 | t          | 2026-11-11 18:28:48.282463+00
+(1 row)
+
+----------------------------------------------------------------
+2. A WRITE ON THE REPLICA IS REJECTED
+----------------------------------------------------------------
+[REPLICA] INSERT INTO branch (name, city) VALUES ('Reject Test', 'Lagos');
+ERROR:  cannot execute INSERT in a read-only transaction
+=> rejected as expected: the standby is read-only
+----------------------------------------------------------------
+3. INSERT ON THE PRIMARY -> ROW ARRIVES ON THE REPLICA
+----------------------------------------------------------------
+[PRIMARY] INSERT branch 'Replica Test 182848'
+ branch_id |        name         |          created_at           
+-----------+---------------------+-------------------------------
+         5 | Replica Test 182848 | 2026-11-11 18:28:48.422088+00
+(1 row)
+
+INSERT 0 1
+[REPLICA] SELECT ... WHERE name = 'Replica Test 182848'
+ branch_id |        name         |  city  |          created_at           
+-----------+---------------------+--------+-------------------------------
+         5 | Replica Test 182848 | Kaduna | 2026-11-11 18:28:48.422088+00
+(1 row)
+
+=> row visible on the replica after about 0.05 s of polling
+----------------------------------------------------------------
+4. REPLICATION LAG
+----------------------------------------------------------------
+[PRIMARY] pg_stat_replication
+ application_name | client_addr |   state   | sync_state | sent_lsn  | replay_lsn | byte_lag |   replay_lag    
+------------------+-------------+-----------+------------+-----------+------------+----------+-----------------
+ walreceiver      |             | streaming | async      | 0/A005D38 | 0/A005D38  |        0 | 00:00:00.006252
+(1 row)
+
+[REPLICA] last replayed position and delay
+ received_lsn | replayed_lsn | time_since_last_replayed_txn 
+--------------+--------------+------------------------------
+ 0/A005D38    | 0/A005D38    | 00:00:00.243363
+(1 row)
+
+----------------------------------------------------------------
+5. PARTITION PRUNING (PRIMARY): loans of the current month only
+----------------------------------------------------------------
+                                                                                                            QUERY PLAN                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual time=0.324..0.324 rows=1 loops=1)
+   ->  Append (actual time=0.094..0.289 rows=954 loops=1)
+         Subplans Removed: 27
+         ->  Bitmap Heap Scan on loan_202611 loan_1 (actual time=0.094..0.245 rows=954 loops=1)
+               Recheck Cond: ((loan_date >= date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)) AND (loan_date < (date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone) + '1 mon'::interval)))
+               Heap Blocks: exact=12
+               ->  Bitmap Index Scan on loan_202611_loan_date_idx (actual time=0.079..0.080 rows=954 loops=1)
+                     Index Cond: ((loan_date >= date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)) AND (loan_date < (date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone) + '1 mon'::interval)))
+(8 rows)
+
+[REPLICA] the same partitioned table is readable on the replica:
+ loans_this_month 
+------------------
+              954
+(1 row)
+
+
+Replication demo finished.
