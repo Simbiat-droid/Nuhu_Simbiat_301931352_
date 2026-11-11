@@ -1,0 +1,244 @@
+ReadWell Libraries - Portfolio 3 two-session concurrency demos
+[observer] SELECT current_user, current_database(), version()
+[observer]   -> ['current_user', 'current_database', 'version']: [('codespace', 'readwell', 'PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit')]
+
+==========================================================================
+SETUP - demo rows (IDs 91xx race, 92xx deadlock, 93xx isolation)
+==========================================================================
+[setup] DROP TABLE IF EXISTS loan_naive
+[setup] NOTICE:  table "loan_naive" does not exist, skipping
+[setup]   -> DROP TABLE
+[setup] DELETE FROM fine WHERE loan_id IN (SELECT loan_id FROM loan WHERE member_id IN (9101,9102,9301))
+[setup]   -> DELETE 1
+[setup] DELETE FROM loan WHERE member_id IN (9101,9102,9301) OR copy_id IN (9101,9201,9202,9301,9302)
+[setup]   -> DELETE 1
+[setup] DELETE FROM reservation WHERE member_id IN (9101,9102,9301)
+[setup]   -> DELETE 0
+[setup] INSERT INTO branch (branch_id,name,city) VALUES (9101,'Race Branch','Lagos'),(9301,'Iso Branch','Lagos') ON CONFLICT (branch_id) DO NOTHING
+[setup]   -> INSERT 0 1
+[setup] INSERT INTO member (member_id,first_name,last_name,email,home_branch_id) VALUES (9101,'Adaeze','Okafor','adaeze.race@test.local',9101),(9102,'Bolaji','Adeyemi','bolaji.race@test.local',9101),(9301,'Iso','Member','iso.member@test.local',9301) ON CONFLICT (member_id) DO NOTHING
+[setup]   -> INSERT 0 2
+[setup] INSERT INTO book (book_id,title,isbn,category) VALUES (9101,'Race Title','978-0000-9101','Fiction'),(9201,'Deadlock Title','978-0000-9201','Fiction'),(9301,'Iso Book 1','978-0000-9301','Fiction') ON CONFLICT (book_id) DO NOTHING
+[setup]   -> INSERT 0 2
+[setup] INSERT INTO copy (copy_id,book_id,branch_id,barcode,status) VALUES (9101,9101,9101,'RACE-9101','available'),(9201,9201,9101,'DL-9201','available'),(9202,9201,9101,'DL-9202','available'),(9301,9301,9301,'ISO-9301','available') ON CONFLICT (copy_id) DO UPDATE SET status='available'
+[setup]   -> INSERT 0 4
+[setup] INSERT INTO loan (copy_id,member_id,loan_date,due_date,return_date) VALUES (9301,9301,NOW()-INTERVAL '40 days',NULL,NOW()-INTERVAL '20 days')
+[setup]   -> INSERT 0 1
+[setup] INSERT INTO fine (loan_id,amount,paid) SELECT loan_id,1500.00,FALSE FROM loan WHERE member_id=9301
+[setup]   -> INSERT 0 1
+[setup] SELECT copy_id, book_id, branch_id, status FROM copy WHERE copy_id=9101
+[setup]   -> ['copy_id', 'book_id', 'branch_id', 'status']: [(9101, 9101, 9101, 'available')]
+
+==========================================================================
+PART 1 - THE BUG: check-then-insert with NO constraint (loan_naive)
+loan_naive is a copy of loan's columns WITHOUT the EXCLUDE constraint,
+i.e. what the database would allow if Portfolio 1 had not added it.
+==========================================================================
+[setup] CREATE TABLE loan_naive (LIKE loan INCLUDING DEFAULTS)
+[setup]   -> CREATE TABLE
+[Terminal A] BEGIN
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT count(*) AS active_loans_on_9101 FROM loan_naive WHERE copy_id=9101 AND return_date IS NULL
+[Terminal A]   -> ['active_loans_on_9101']: [(0,)]
+[Terminal B] BEGIN
+[Terminal B]   -> BEGIN
+[Terminal B] SELECT count(*) AS active_loans_on_9101 FROM loan_naive WHERE copy_id=9101 AND return_date IS NULL
+[Terminal B]   -> ['active_loans_on_9101']: [(0,)]
+-- both sessions saw 0 active loans, so both 'decide' the copy is free --
+[Terminal A] INSERT INTO loan_naive (copy_id,member_id,loan_date,due_date,loan_range) VALUES (9101,9101,NOW(),NOW()+INTERVAL '14 days',tstzrange(NOW(),NOW()+INTERVAL '14 days'))
+[Terminal A]   -> INSERT 0 1
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal B] INSERT INTO loan_naive (copy_id,member_id,loan_date,due_date,loan_range) VALUES (9101,9102,NOW(),NOW()+INTERVAL '14 days',tstzrange(NOW(),NOW()+INTERVAL '14 days'))
+[Terminal B]   -> INSERT 0 1
+[Terminal B] COMMIT
+[Terminal B]   -> COMMIT
+[check] SELECT copy_id, member_id, loan_range FROM loan_naive WHERE copy_id=9101 ORDER BY member_id
+[check]   -> ['copy_id', 'member_id', 'loan_range']: [(9101, 9101, DateTimeTZRange(datetime.datetime(2026, 11, 11, 18, 28, 11, 445607, tzinfo=datetime.timezone.utc), datetime.datetime(2026, 11, 25, 18, 28, 11, 445607, tzinfo=datetime.timezone.utc), '[)')), (9101, 9102, DateTimeTZRange(datetime.datetime(2026, 11, 11, 18, 28, 11, 446061, tzinfo=datetime.timezone.utc), datetime.datetime(2026, 11, 25, 18, 28, 11, 446061, tzinfo=datetime.timezone.utc), '[)'))]
+RESULT PART 1: 2 overlapping loans of ONE physical copy -> BUG REPRODUCED (lost update / double booking)
+[cleanup] DROP TABLE loan_naive
+[cleanup]   -> DROP TABLE
+
+==========================================================================
+PART 2 - FIX 1: the EXCLUDE constraint on loan(copy_id, loan_range)
+==========================================================================
+[Terminal A] BEGIN
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT copy_id, status FROM copy WHERE copy_id=9101 AND status='available'
+[Terminal A]   -> ['copy_id', 'status']: [(9101, 'available')]
+[Terminal B] BEGIN
+[Terminal B]   -> BEGIN
+[Terminal B] SELECT copy_id, status FROM copy WHERE copy_id=9101 AND status='available'
+[Terminal B]   -> ['copy_id', 'status']: [(9101, 'available')]
+[Terminal A] INSERT INTO loan (copy_id,member_id,loan_date,due_date) VALUES (9101,9101,NOW(),NULL)
+[Terminal A]   -> INSERT 0 1
+[Terminal A] UPDATE copy SET status='on_loan' WHERE copy_id=9101
+[Terminal A]   -> UPDATE 1
+[Terminal B] INSERT INTO loan (copy_id,member_id,loan_date,due_date) VALUES (9101,9102,NOW(),NULL)
+[Terminal B] (still running after 1.5 s: True)
+[observer] SELECT application_name, state, wait_event_type, wait_event FROM pg_stat_activity WHERE application_name = %s
+[observer]   -> ['application_name', 'state', 'wait_event_type', 'wait_event']: [('Terminal B', 'active', 'Lock', 'transactionid')]
+[observer] => Terminal B is BLOCKED, waiting for a lock held by the other session
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal B] ERROR:  conflicting key value violates exclusion constraint "loan_copy_id_loan_range_excl"
+DETAIL:  Key (copy_id, loan_range)=(9101, ["2026-11-11 18:28:11.451546+00","2026-11-25 18:28:11.451546+00")) conflicts with existing key (copy_id, loan_range)=(9101, ["2026-11-11 18:28:11.451028+00","2026-11-25 18:28:11.451028+00")).
+[Terminal B] waited 1.50 s, then: REJECTED by loan_copy_id_loan_range_excl
+[Terminal B] ROLLBACK
+[Terminal B]   -> ROLLBACK
+[check] SELECT member_id, copy_id FROM loan WHERE copy_id=9101 AND return_date IS NULL
+[check]   -> ['member_id', 'copy_id']: [(9101, 9101)]
+RESULT PART 2: 1 active loan on copy 9101 (only Terminal A's) - no double loan
+
+==========================================================================
+PART 3 - FIX 2: borrow_copy() uses SELECT ... FOR UPDATE
+B waits for A, re-checks the row, finds it on_loan and is RESERVED instead
+==========================================================================
+[reset] DELETE FROM loan WHERE member_id IN (9101,9102)
+[reset]   -> DELETE 1
+[reset] DELETE FROM reservation WHERE member_id IN (9101,9102)
+[reset]   -> DELETE 0
+[reset] UPDATE copy SET status='available' WHERE copy_id=9101
+[reset]   -> UPDATE 1
+[Terminal A] BEGIN
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT borrow_copy(9101, 9101, 9101) AS copy_borrowed
+[Terminal A]   -> ['copy_borrowed']: [(9101,)]
+[Terminal B] BEGIN
+[Terminal B]   -> BEGIN
+[Terminal B] SELECT borrow_copy(9102, 9101, 9101) AS copy_borrowed
+[Terminal B] (still running after 1.5 s: True)
+[observer] SELECT application_name, state, wait_event_type, wait_event FROM pg_stat_activity WHERE application_name = %s
+[observer]   -> ['application_name', 'state', 'wait_event_type', 'wait_event']: [('Terminal B', 'active', 'Lock', 'transactionid')]
+[observer] => Terminal B is BLOCKED, waiting for a lock held by the other session
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal B]   -> ['copy_borrowed']: [(None,)]
+[Terminal B] waited 1.50 s, borrow_copy returned [(None,)] (NULL = no copy left, a reservation was created)
+[Terminal B] COMMIT
+[Terminal B]   -> COMMIT
+[check] SELECT member_id, book_id, branch_id, fulfilled_at FROM reservation WHERE member_id=9102
+[check]   -> ['member_id', 'book_id', 'branch_id', 'fulfilled_at']: [(9102, 9101, 9101, None)]
+[check] SELECT copy_id, status FROM copy WHERE copy_id=9101
+[check]   -> ['copy_id', 'status']: [(9101, 'on_loan')]
+[check] SELECT member_id, copy_id FROM loan WHERE copy_id=9101 AND return_date IS NULL
+[check]   -> ['member_id', 'copy_id']: [(9101, 9101)]
+RESULT PART 3: A got the copy, B got a reservation - no error, no double loan
+
+==========================================================================
+PART 4 - SERIALIZABLE: two librarians add a charge to the SAME fine
+==========================================================================
+[reset] UPDATE fine SET amount=1500.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[reset]   -> UPDATE 1
+[Terminal A] BEGIN ISOLATION LEVEL SERIALIZABLE
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT fine_id, amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['fine_id', 'amount']: [(25288, Decimal('1500.00'))]
+[Terminal B] BEGIN ISOLATION LEVEL SERIALIZABLE
+[Terminal B]   -> BEGIN
+[Terminal B] SELECT fine_id, amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal B]   -> ['fine_id', 'amount']: [(25288, Decimal('1500.00'))]
+[Terminal A] UPDATE fine SET amount = amount + 100 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> UPDATE 1
+[Terminal B] UPDATE fine SET amount = amount + 200 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal B] (still running after 1.5 s: True)
+[observer] SELECT application_name, state, wait_event_type, wait_event FROM pg_stat_activity WHERE application_name = %s
+[observer]   -> ['application_name', 'state', 'wait_event_type', 'wait_event']: [('Terminal B', 'active', 'Lock', 'transactionid')]
+[observer] => Terminal B is BLOCKED, waiting for a lock held by the other session
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal B] ERROR:  could not serialize access due to concurrent update
+[Terminal B] -> ERROR (SQLSTATE 40001)
+[Terminal B] ROLLBACK
+[Terminal B]   -> ROLLBACK
+[check] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[check]   -> ['amount']: [(Decimal('1600.00'),)]
+RESULT PART 4: final amount = 1600.00 (1500 + A's 100 only; B must retry, no lost update)
+
+==========================================================================
+PART 5 - READ COMMITTED vs REPEATABLE READ
+==========================================================================
+[reset] UPDATE fine SET amount=1500.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[reset]   -> UPDATE 1
+-- 5a READ COMMITTED: A reads, B updates + commits, A reads again --
+[Terminal A] BEGIN ISOLATION LEVEL READ COMMITTED
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['amount']: [(Decimal('1500.00'),)]
+[Terminal B] UPDATE fine SET amount = 2000.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal B]   -> UPDATE 1
+[Terminal A] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['amount']: [(Decimal('2000.00'),)]
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+RESULT 5a: first read 1500.00, second read 2000.00 inside ONE transaction -> non-repeatable read
+[reset] UPDATE fine SET amount=1500.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[reset]   -> UPDATE 1
+-- 5b REPEATABLE READ: same steps --
+[Terminal A] BEGIN ISOLATION LEVEL REPEATABLE READ
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['amount']: [(Decimal('1500.00'),)]
+[Terminal B] UPDATE fine SET amount = 2000.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal B]   -> UPDATE 1
+[Terminal A] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['amount']: [(Decimal('1500.00'),)]
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal A] SELECT amount FROM fine WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[Terminal A]   -> ['amount']: [(Decimal('2000.00'),)]
+RESULT 5b: reads inside the transaction 1500.00 and 1500.00 (snapshot), after COMMIT 2000.00
+-- 5c REPEATABLE READ hides a phantom: B inserts an active loan for member 9301 --
+[Terminal A] BEGIN ISOLATION LEVEL REPEATABLE READ
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT count(*) AS active_loans FROM loan WHERE member_id=9301 AND return_date IS NULL
+[Terminal A]   -> ['active_loans']: [(0,)]
+[Terminal B] INSERT INTO loan (copy_id,member_id,loan_date,due_date) VALUES (9301,9301,NOW(),NULL)
+[Terminal B]   -> INSERT 0 1
+[Terminal A] SELECT count(*) AS active_loans FROM loan WHERE member_id=9301 AND return_date IS NULL
+[Terminal A]   -> ['active_loans']: [(0,)]
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal A] SELECT count(*) AS active_loans FROM loan WHERE member_id=9301 AND return_date IS NULL
+[Terminal A]   -> ['active_loans']: [(1,)]
+RESULT 5c: inside REPEATABLE READ 0 then 0 (phantom hidden); new snapshot 1
+[reset] DELETE FROM loan WHERE member_id=9301 AND return_date IS NULL
+[reset]   -> DELETE 1
+[reset] UPDATE fine SET amount=1500.00 WHERE fine_id=(SELECT f.fine_id FROM fine f JOIN loan l ON l.loan_id=f.loan_id WHERE l.member_id=9301 LIMIT 1)
+[reset]   -> UPDATE 1
+
+==========================================================================
+PART 6 - DEADLOCK: A locks 9201 then 9202, B locks 9202 then 9201
+==========================================================================
+[Terminal A] BEGIN
+[Terminal A]   -> BEGIN
+[Terminal A] SELECT copy_id, status FROM copy WHERE copy_id=9201 FOR UPDATE
+[Terminal A]   -> ['copy_id', 'status']: [(9201, 'available')]
+[Terminal B] BEGIN
+[Terminal B]   -> BEGIN
+[Terminal B] SELECT copy_id, status FROM copy WHERE copy_id=9202 FOR UPDATE
+[Terminal B]   -> ['copy_id', 'status']: [(9202, 'available')]
+[Terminal A] SELECT copy_id, status FROM copy WHERE copy_id=9202 FOR UPDATE
+[Terminal A] (still running after 1.5 s: True)
+[observer] SELECT application_name, state, wait_event_type, wait_event FROM pg_stat_activity WHERE application_name = %s
+[observer]   -> ['application_name', 'state', 'wait_event_type', 'wait_event']: [('Terminal A', 'active', 'Lock', 'transactionid')]
+[observer] => Terminal A is BLOCKED, waiting for a lock held by the other session
+[Terminal B] SELECT copy_id, status FROM copy WHERE copy_id=9201 FOR UPDATE
+[Terminal B] ERROR:  deadlock detected
+DETAIL:  Process 29109 waits for ShareLock on transaction 65568; blocked by process 29108.
+Process 29108 waits for ShareLock on transaction 65569; blocked by process 29109.
+HINT:  See server log for query details.
+CONTEXT:  while locking tuple (62,93) in relation "copy"
+[Terminal A]   -> ['copy_id', 'status']: [(9202, 'available')]
+[Terminal A] SURVIVOR: its blocked SELECT returned [(9202, 'available')]
+[Terminal A] COMMIT
+[Terminal A]   -> COMMIT
+[Terminal B] VICTIM: SQLSTATE 40P01 (40P01 = deadlock_detected)
+[Terminal B] ROLLBACK
+[Terminal B]   -> ROLLBACK
+RESULT PART 6: PostgreSQL detected the cycle (deadlock_timeout = 1 s) and aborted one
+transaction. Prevention: always lock copies in a fixed order (lowest copy_id first).
+
+==========================================================================
+ALL SIX DEMOS FINISHED
+==========================================================================
